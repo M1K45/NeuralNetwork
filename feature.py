@@ -7,8 +7,15 @@ import matplotlib.pyplot as plt
 import csv
 from sklearn.model_selection import train_test_split
 
+# TODO: 
+# problem przeuczenia 
+# moze dropout? 
+# albo inna normalizacja 
+# 
+
+
 #plik csv
-data_path = "/data.csv"
+data_path = "data.csv"
 
 with open(data_path, 'r', encoding='utf-8') as f:
     reader = csv.reader(f, delimiter=',')
@@ -19,7 +26,7 @@ print("Columns:", col_names)
 data_numpy = np.loadtxt(data_path, dtype=int, delimiter=",", skiprows=1)
 print("Data shape:", data_numpy.shape)
 
-#cechy i etykiety
+#cechy i etykiety - tutaj dzielimy dane na wejścia i wyjścia 
 X = data_numpy[:, :-1]
 y = data_numpy[:, -1]  #ostatnia kolumna to GRADE
 
@@ -27,14 +34,14 @@ y = data_numpy[:, -1]  #ostatnia kolumna to GRADE
 X_t = torch.from_numpy(X).float()
 y_t = torch.from_numpy(y).long()
 
-#podział na zbiór treningowy i walidacyjny
-X_train_t, X_val_t, y_train_t, y_val_t = train_test_split(X_t, y_t, test_size=0.2, random_state=42)
+#podział na zbiór treningowy i walidacyjny - zbiór treningowy ma 116 elementów
+X_train_t, X_val_t, y_train_t, y_val_t = train_test_split(X_t, y_t, test_size=0.3, random_state=42, shuffle=True)
 train_dataset = TensorDataset(X_train_t, y_train_t)
 val_dataset = TensorDataset(X_val_t, y_val_t)
 batch_size = 32
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-input_size = X_train_t.shape[1]
+input_size = X_train_t.shape[1]       # liczba wejść w warstwie wejściowej - czynników
 num_classes = len(torch.unique(y_t))  # liczba unikalnych klas w etykiecie
 print("Number of classes:", num_classes)
 
@@ -43,27 +50,33 @@ print("Number of classes:", num_classes)
 #tzreba dodać regularyzacje np dropout bo jest przeuczenie i jakos pobawić sie z normalizacją bo MSE nie takie
 
 epochs = 1000
-learning_rate = 0.01
+learning_rate = 0.001
 momentum = 0.9
 early_stopping_threshold = 0.01
-hidden_dim = 16
+hidden_dim = 2
 
 class SimpleMLP(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
         super(SimpleMLP, self).__init__()
         self.fc1 = nn.Linear(input_dim, hidden_dim)
         self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(p=0.3) 
+        # self.fc2 = nn.Linear(hidden_dim, 7)
         self.fc2 = nn.Linear(hidden_dim, output_dim)
 
     def forward(self, x):
         out = self.fc1(x)
         out = self.relu(out)
+        # out = self.fc2(out)
+        # out = self.relu(out)
+        out = self.dropout(out)
         out = self.fc2(out)
         return out
 
 model = SimpleMLP(input_size, hidden_dim, num_classes)
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum)
+optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum, weight_decay=1e-4)
+
 
 
 #funkcje pomocnicze
@@ -143,8 +156,9 @@ for epoch in range(epochs):
         w1_list.append(w1)
         w2_list.append(w2)
 
-    print(
-        f"Epoch [{epoch + 1}/{epochs}] - Train MSE: {train_mse:.4f}, Train Acc: {train_acc:.4f}, Val MSE: {val_mse:.4f}, Val Acc: {val_acc:.4f}")
+    if epoch % 100 == 0:
+        print(
+            f"Epoch [{epoch + 1}/{epochs}] - Train MSE: {train_mse:.4f}, Train Acc: {train_acc:.4f}, Val MSE: {val_mse:.4f}, Val Acc: {val_acc:.4f}")
 
     if val_mse < early_stopping_threshold:
         print("wczesne zakończenie uczenia - osiągnięto zadany próg bledu MSE.")
@@ -172,15 +186,15 @@ plt.tight_layout()
 plt.show()
 
 #wizualizacja wag (co 50 epok)
-for i, (w1_snapshot, w2_snapshot) in enumerate(zip(w1_list, w2_list)):
-    plt.figure(figsize=(10, 4))
-    plt.subplot(1, 2, 1)
-    plt.imshow(w1_snapshot, aspect='auto', cmap='bwr')
-    plt.colorbar()
-    plt.title(f'wagi warstwy 1 - po {i * 50} epokach')
-    plt.subplot(1, 2, 2)
-    plt.imshow(w2_snapshot, aspect='auto', cmap='bwr')
-    plt.colorbar()
-    plt.title(f'wagi warstwy 2 - po {i * 50} epokach')
-    plt.tight_layout()
-    plt.show()
+# for i, (w1_snapshot, w2_snapshot) in enumerate(zip(w1_list, w2_list)):
+#     plt.figure(figsize=(10, 4))
+#     plt.subplot(1, 2, 1)
+#     plt.imshow(w1_snapshot, aspect='auto', cmap='bwr')
+#     plt.colorbar()
+#     plt.title(f'wagi warstwy 1 - po {i * 50} epokach')
+#     plt.subplot(1, 2, 2)
+#     plt.imshow(w2_snapshot, aspect='auto', cmap='bwr')
+#     plt.colorbar()
+#     plt.title(f'wagi warstwy 2 - po {i * 50} epokach')
+#     plt.tight_layout()
+#     plt.show()

@@ -6,14 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import csv
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
 from torch.optim.lr_scheduler import StepLR
-# TODO: 
-# problem przeuczenia 
-# moze dropout? 
-# albo inna normalizacja 
-# 
-
 
 #plik csv
 data_path = "data.csv"
@@ -29,13 +22,13 @@ print("Data shape:", data_numpy.shape)
 
 #cechy i etykiety - tutaj dzielimy dane na wejścia i wyjścia 
 X = data_numpy[:, :-1]
-y = data_numpy[:, -1]  #ostatnia kolumna to GRADE
+y = data_numpy[:, -1]  #ostatnia kolumna to dane wyjściowe
 
 #konwersja do tensora PyTorch
 X_t = torch.from_numpy(X).float()
 y_t = torch.from_numpy(y).long()
 
-#podział na zbiór treningowy i walidacyjny - zbiór treningowy ma 116 elementów
+#podział na zbiór treningowy i walidacyjny 
 X_train_t, X_val_t, y_train_t, y_val_t = train_test_split(X_t, y_t, test_size=0.3, random_state=42, shuffle=True)
 train_dataset = TensorDataset(X_train_t, y_train_t)
 val_dataset = TensorDataset(X_val_t, y_val_t)
@@ -48,8 +41,6 @@ print("Number of classes:", num_classes)
 
 #-------------------------------------------------------------------------
 #konfiguracja modelu
-#tzreba dodać regularyzacje np dropout bo jest przeuczenie i jakos pobawić sie z normalizacją bo MSE nie takie
-
 epochs = 1000
 learning_rate = 0.0005
 momentum = 0.9
@@ -62,14 +53,11 @@ class SimpleMLP(nn.Module):
         self.fc1 = nn.Linear(input_dim, hidden_dim)
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(p=0.1) 
-        # self.fc2 = nn.Linear(hidden_dim, 7)
         self.fc2 = nn.Linear(hidden_dim, output_dim)
 
     def forward(self, x):
         out = self.fc1(x)
         out = self.relu(out)
-        # out = self.fc2(out)
-        # out = self.relu(out)
         out = self.dropout(out)
         out = self.fc2(out)
         return out
@@ -77,7 +65,6 @@ class SimpleMLP(nn.Module):
 model = SimpleMLP(input_size, hidden_dim, num_classes)
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum, weight_decay=1e-3)
-
 scheduler = StepLR(optimizer, step_size=100, gamma=0.5)
 
 #funkcje pomocnicze
@@ -110,7 +97,7 @@ val_acc_list = []
 w1_list = []
 w2_list = []
 
-early_stopping_patience = 100  # liczba epok bez poprawy
+early_stopping_patience = 50  # liczba epok bez poprawy
 best_val_loss = float('inf')
 patience_counter = 0
 
@@ -141,7 +128,6 @@ for epoch in range(epochs):
     val_total_samples = 0
     val_total_correct = 0
     val_total_mse = 0
-
     val_loss = 0
 
     with torch.no_grad():
@@ -149,7 +135,6 @@ for epoch in range(epochs):
             outputs = model(batch_X)
 
             val_loss += criterion(outputs, batch_y).item()
-
             val_total_samples += batch_X.size(0)
             val_total_correct += (outputs.argmax(dim=1) == batch_y).sum().item()
             batch_mse = calculate_mse(outputs, batch_y, num_classes)
@@ -163,8 +148,6 @@ for epoch in range(epochs):
     val_mse_list.append(val_mse)
     train_acc_list.append(train_acc)
     val_acc_list.append(val_acc)
-
-    scheduler.step()
 
     if epoch % 50 == 0:
         w1, w2 = get_weights(model)
@@ -182,15 +165,16 @@ for epoch in range(epochs):
     else:
         patience_counter += 1
 
-    # if patience_counter >= early_stopping_patience:
-        # print(f"Zatrzymanie na epoce {epoch}")
-        # break
+    if patience_counter >= early_stopping_patience:
+        print(f"Zatrzymanie na epoce {epoch}")
+        break
 
 
     if val_mse < early_stopping_threshold:
         print("wczesne zakończenie uczenia - osiągnięto zadany próg bledu MSE.")
         break
-
+    scheduler.step()
+    
 #-------------------------------------------------------------------------
 #wizualizacje
 
